@@ -86,9 +86,7 @@ class ImageEditorWidget(QWidget):
 
 class ListFileWidget(QWidget):
     def __init__(self, parent, text):
-        super().__init__(parent)
-
-        self.parent = parent
+        super().__init__()
 
         self.text = QLabel(parent)
         self.text.move(5, 8)
@@ -102,23 +100,3 @@ class ListFileWidget(QWidget):
         self.btn = QPushButton(parent)
         self.btn.setText('X')
         self.btn.setGeometry(QtCore.QRect(75, 5, 20, 20))
-
-        self.btn.pressed.connect(self.close)
-
-    def close(self):  # removes itself from a parent tableWidget with a button press
-        table = super().parent().parent().parent()
-
-        column = table.indexAt(self.parent.pos()).column()
-        table.removeColumn(column)
-
-        with open('data.json', 'r') as f:
-            data = json.load(f)
-            data['opened_files'].pop(data['opened_files'].index(self.text.toolTip()))
-
-        with open('data.json', 'w') as f:
-            json.dump(data, f, indent=4)
-
-
-"""
-    при нажатии на кнопку надо посылать сигнал олжительскому классу чтобы он там что-то сделал, а то так нет доступа к нескольким переменным
-"""

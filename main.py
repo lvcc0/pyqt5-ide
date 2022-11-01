@@ -5,7 +5,7 @@ import widgets
 
 from PyQt5 import uic, QtCore
 from PyQt5.QtWidgets import QFileDialog, QMessageBox, QInputDialog, QAbstractItemView
-from PyQt5.QtWidgets import QMainWindow, QApplication, QListWidgetItem, QWidget
+from PyQt5.QtWidgets import QMainWindow, QApplication, QListWidgetItem, QWidget, QLabel
 
 CustomObjectRole = QtCore.Qt.UserRole + 1
 
@@ -20,6 +20,7 @@ class MyWidget(QMainWindow):
         self.setMinimumHeight(self.tableWidget.height() * 3)
 
         self.textEditor = widgets.TextEditorWidget(self.widget)
+        self.status_bar = self.statusBar()
 
         with open('data.json', 'r') as f:
             self.data = json.load(f)
@@ -36,8 +37,10 @@ class MyWidget(QMainWindow):
         self.listWidget.doubleClicked.connect(self.choose_item)
         self.lineEdit.returnPressed.connect(self.change_folder_name)
         self.tableWidget.cellClicked.connect(self.open_file_from_list)
+        self.textEditor.textEdit.cursorPositionChanged.connect(self.update_status_bar)
 
         self.opened_file = ''
+        self.opened_files = []
 
         self.tableWidget.verticalHeader().setVisible(False)
         self.tableWidget.horizontalHeader().setVisible(False)
@@ -106,6 +109,7 @@ class MyWidget(QMainWindow):
                 with open('data.json', 'w', encoding='utf-8') as f:
                     json.dump(self.data, f, indent=4)
 
+            self.update_status_bar(file)
             self.update_file_list()
 
 
@@ -200,19 +204,45 @@ class MyWidget(QMainWindow):
             self.open_folder(self.data['cur_folder'])
 
     def update_file_list(self):
-        with open('data.json', 'r') as f:
-            self.data = json.load(f)
-
         self.tableWidget.clear()
         self.tableWidget.setColumnCount(len(self.data['opened_files']))
+        self.opened_files.clear()
+
         for i, file in enumerate(self.data['opened_files']):
             widget = QWidget()
-            widgets.ListFileWidget(widget, file)
+            obj = widgets.ListFileWidget(widget, file)
+
+            self.opened_files.append(obj)
+            self.opened_files[i].btn.clicked.connect(self.remove_file_from_list)
 
             self.tableWidget.setCellWidget(0, i, widget)
 
-    def open_file_from_list(self, row, column):
-        self.open_file(self.data['opened_files'][column])
+    def remove_file_from_list(self):
+        col = self.tableWidget.indexAt(self.sender().parent().pos()).column()
+        self.tableWidget.removeColumn(col)
+
+        if os.path.basename(self.opened_file) == self.sender().parent().findChildren(QWidget)[0].toolTip():
+            if self.tableWidget.columnCount():
+                self.open_file(self.opened_files[0 if col != 0 else 1].text.toolTip())
+            else:
+                self.textEditor.setText('')
+                self.update_status_bar('No file is currently opened', show_pos=False)
+            
+        del self.data['opened_files'][col]
+        with open('data.json', 'w') as f:
+            json.dump(self.data, f, indent=4)
+
+        self.update_file_list()
+
+    def open_file_from_list(self, row, col):
+        self.open_file(self.data['opened_files'][col])
+
+    def update_status_bar(self, text=None, show_pos=True):
+        if text == None:
+            text = self.status_bar.currentMessage().split(' ; ')[0]
+
+        res = f'{text} ; Pos {self.textEditor.textEdit.textCursor().position()}' if show_pos else text
+        self.status_bar.showMessage(res)
 
 
 if __name__ == '__main__':
