@@ -1,7 +1,5 @@
-import json
-
 from PyQt5 import QtCore
-from PyQt5.QtWidgets import QWidget, QLabel, QPushButton, QHBoxLayout, QTextEdit, QTableWidget
+from PyQt5.QtWidgets import QWidget, QLabel, QPushButton, QHBoxLayout, QTextEdit, QLineEdit
 
 
 class FolderItemQWidget(QWidget):
@@ -33,6 +31,25 @@ class FileItemQWidget(QWidget):
 
         #TODO: make some functions and icons for different file types
         #TODO: directory as an attribute (to open files deviant from the opened folder)
+
+
+class ListFileWidget(QWidget):
+    def __init__(self, parent, text):
+        super().__init__()
+
+        self.text = QLabel(parent)
+        self.text.move(5, 8)
+        self.text.setToolTip(text)
+
+        if len(text) > 10:
+            self.text.setText(f'{text[:4]}..{text[-7:]}')
+        else:
+            self.text.setText(text)
+
+        self.btn = QPushButton(parent)
+        self.btn.setText('X')
+        self.btn.setGeometry(QtCore.QRect(75, 5, 20, 20))
+
 
 class TextEditorWidget(QWidget):
     resized = QtCore.pyqtSignal()
@@ -80,23 +97,24 @@ class TextEditorWidget(QWidget):
         return self.textEdit.toPlainText()
 
 
-class ImageEditorWidget(QWidget):
-    pass
+class ConsoleWidget(QWidget):
+    resized = QtCore.pyqtSignal()
 
-
-class ListFileWidget(QWidget):
-    def __init__(self, parent, text):
+    def __init__(self):
         super().__init__()
+        self.resized.connect(self.resize_widgets)
+        self.setWindowTitle('Console')
 
-        self.text = QLabel(parent)
-        self.text.move(5, 8)
-        self.text.setToolTip(text)
+        self.text = QTextEdit(self)
+        self.text.setReadOnly(True)
+        self.text.setGeometry(QtCore.QRect(0, 0, self.width(), self.height()))
 
-        if len(text) > 10:
-            self.text.setText(f'{text[:4]}..{text[-7:]}')
-        else:
-            self.text.setText(text)
+    def resizeEvent(self, event):
+        self.resized.emit()
+        return super().resizeEvent(event)
 
-        self.btn = QPushButton(parent)
-        self.btn.setText('X')
-        self.btn.setGeometry(QtCore.QRect(75, 5, 20, 20))
+    def resize_widgets(self):
+        self.text.setGeometry(QtCore.QRect(0, 0, self.width(), self.height()))
+
+    def print(self, arg):
+        self.text.insertPlainText(str(arg))

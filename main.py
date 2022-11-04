@@ -1,11 +1,15 @@
 import sys
 import json
 import os
+from pkgutil import walk_packages
+from importlib import import_module
+
 import widgets
+import interpreters
 
 from PyQt5 import uic, QtCore
 from PyQt5.QtWidgets import QFileDialog, QMessageBox, QInputDialog, QAbstractItemView
-from PyQt5.QtWidgets import QMainWindow, QApplication, QListWidgetItem, QWidget, QLabel
+from PyQt5.QtWidgets import QMainWindow, QApplication, QListWidgetItem, QWidget, QAction
 
 CustomObjectRole = QtCore.Qt.UserRole + 1
 
@@ -21,6 +25,7 @@ class MyWidget(QMainWindow):
 
         self.textEditor = widgets.TextEditorWidget(self.widget)
         self.status_bar = self.statusBar()
+        self.console = widgets.ConsoleWidget()
 
         with open('data.json', 'r') as f:
             self.data = json.load(f)
@@ -33,6 +38,7 @@ class MyWidget(QMainWindow):
         self.actionSave_file.triggered.connect(self.save_file)
         self.actionSave_as.triggered.connect(self.save_as)
         self.actionDelete_file.triggered.connect(self.delete_file)
+
 
         self.listWidget.doubleClicked.connect(self.choose_item)
         self.lineEdit.returnPressed.connect(self.change_folder_name)
@@ -49,7 +55,17 @@ class MyWidget(QMainWindow):
         self.tableWidget.setColumnCount(len(self.data['opened_files']))
         self.tableWidget.setEditTriggers(QAbstractItemView.NoEditTriggers)
 
+        for loader, name, ispkg in walk_packages(interpreters.__path__):
+            __import__(f'interpreters.{name}')
+
+            action = QAction(self)
+            action.setText(name)
+            self.menuRun.addAction(action)
+
+            action.triggered.connect(self.run_code)
+
         self.open_folder(self.data['cur_folder'])
+        self.update_status_bar(text='No file is currently opened', show_pos=False)
         self.update_file_list()
 
     def resizeEvent(self, event):
@@ -244,9 +260,26 @@ class MyWidget(QMainWindow):
         res = f'{text} ; Pos {self.textEditor.textEdit.textCursor().position()}' if show_pos else text
         self.status_bar.showMessage(res)
 
+    def run_code(self, mod):
+        if not self.opened_file:
+            return
+
+        self.console.text.setText('')
+
+        mod = import_module(f'interpreters.{self.sender().text()}')
+        interpreter = mod.Interpreter()
+
+        with open(self.opened_file, 'r') as f:
+            code = f.read()
+
+        interpreter.run(code, self.console)
+        self.console.show()
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     ex = MyWidget()
     ex.show()
     sys.exit(app.exec())
+
+
+# TODO: make it visible if file is redacted (like a dot in vs code)
