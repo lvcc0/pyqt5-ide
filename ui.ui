@@ -78,7 +78,13 @@
     <addaction name="separator"/>
     <addaction name="actionDelete_file"/>
    </widget>
+   <widget class="QMenu" name="menuRun">
+    <property name="title">
+     <string>Run</string>
+    </property>
+   </widget>
    <addaction name="menufile"/>
+   <addaction name="menuRun"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
   <action name="actionOpen_file">
