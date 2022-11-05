@@ -1,36 +1,72 @@
+import os
+
 from PyQt5 import QtCore
 from PyQt5.QtWidgets import QWidget, QLabel, QPushButton, QHBoxLayout, QTextEdit, QLineEdit
+from PyQt5.QtGui import QPixmap, QFontMetrics, QFont
 
 
-class FolderItemQWidget(QWidget):
-    def __init__(self, folder):
+class FolderItemWidget(QWidget):
+    def __init__(self, folder, is_sub=False):
         super().__init__()
 
-        label = QLabel(folder)
-        button = QPushButton('btn')
+        label = QLabel(self)
+
+        if len(folder) > 15:
+            label.setText(f'{folder[:13]}...')
+        else:
+            label.setText(folder)
+
+        label.setToolTip(folder)
+
+        size = label.fontMetrics().boundingRect(label.text()).height()
+        pixmap = QPixmap(os.path.join('icons', 'folder.png')).scaled(size, size)
+
+        icon = QLabel(self)
+        icon.setPixmap(pixmap)
 
         layout = QHBoxLayout()
-        layout.addWidget(label)
-        layout.addWidget(button, 1)
+
+        if is_sub:
+            layout.addWidget(QLabel('\\'))
+            layout.addWidget(icon, 1)
+            layout.addWidget(label, 10)
+        else:
+            layout.addWidget(icon)
+            layout.addWidget(label, 1)
 
         self.setLayout(layout)
 
-        #TODO: make folder icon
-        #TODO: subfolders and files inside as an attribute
 
-class FileItemQWidget(QWidget):
-    def __init__(self, file):
+class FileItemWidget(QWidget):
+    def __init__(self, file, is_sub=False):
         super().__init__()
 
-        label = QLabel(file)
+        label = QLabel(self)
+
+        if len(file) > 15:
+            label.setText(f'{file[:13]}...')
+        else:
+            label.setText(file)
+
+        label.setToolTip(file)
+
+        size = label.fontMetrics().boundingRect(label.text()).height()
+        pixmap = QPixmap(os.path.join('icons', 'file.png')).scaled(size, size)
+
+        icon = QLabel(self)
+        icon.setPixmap(pixmap)
 
         layout = QHBoxLayout()
-        layout.addWidget(label)
+
+        if is_sub:
+            layout.addWidget(QLabel('\\'))
+            layout.addWidget(icon, 1)
+            layout.addWidget(label, 10)
+        else:
+            layout.addWidget(icon)
+            layout.addWidget(label, 1)
 
         self.setLayout(layout)
-
-        #TODO: make some functions and icons for different file types
-        #TODO: directory as an attribute (to open files deviant from the opened folder)
 
 
 class ListFileWidget(QWidget):
@@ -50,7 +86,6 @@ class ListFileWidget(QWidget):
         self.btn.setText('X')
         self.btn.setGeometry(QtCore.QRect(75, 5, 20, 20))
 
-
 class TextEditorWidget(QWidget):
     resized = QtCore.pyqtSignal()
 
@@ -58,15 +93,19 @@ class TextEditorWidget(QWidget):
         super().__init__(parent)
         self.resized.connect(self.resize_widgets)
 
+        self.font = QFont('Consolas', 9, QFont.Light)
+
         self.lcm = 1  # line counter max
         self.lineCounter = QTextEdit(parent)
         self.lineCounter.setGeometry(QtCore.QRect(0, 0, 16, parent.height()))
         self.lineCounter.setReadOnly(True)
         self.lineCounter.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.lineCounter.setFont(self.font)
 
         self.textEdit = QTextEdit(parent)
         self.textEdit.setGeometry(QtCore.QRect(self.lineCounter.width() - 1, 0,
                                                parent.width() - self.lineCounter.width(), parent.height()))
+        self.textEdit.setFont(self.font)
 
         self.textEdit.textChanged.connect(self.count_lines)
         self.textEdit.textChanged.connect(self.handle_value_changed)
@@ -77,7 +116,8 @@ class TextEditorWidget(QWidget):
         return super().resizeEvent(event)
 
     def resize_widgets(self):
-        self.lineCounter.resize(9 * self.lcm + 4 if self.lcm != 1 else 16, super().height())
+        size_of_one = QFontMetrics(self.font).width('9')
+        self.lineCounter.resize(size_of_one * self.lcm + 10, super().height())
         self.textEdit.setGeometry(QtCore.QRect(self.lineCounter.width() - 1, 0,
                                                super().width() - self.lineCounter.width(), super().height()))
 

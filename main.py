@@ -1,8 +1,10 @@
 import sys
 import json
 import os
+import webbrowser
 from pkgutil import walk_packages
 from importlib import import_module
+from shutil import rmtree
 
 import widgets
 import interpreters
@@ -10,16 +12,19 @@ import interpreters
 from PyQt5 import uic, QtCore
 from PyQt5.QtWidgets import QFileDialog, QMessageBox, QInputDialog, QAbstractItemView
 from PyQt5.QtWidgets import QMainWindow, QApplication, QListWidgetItem, QWidget, QAction
+from PyQt5.QtGui import QIcon
 
 CustomObjectRole = QtCore.Qt.UserRole + 1
 
 
-class MyWidget(QMainWindow):
+class MainWindow(QMainWindow):
     resized = QtCore.pyqtSignal()
     
     def __init__(self):
         super().__init__()
         uic.loadUi('ui.ui', self)
+        self.setWindowIcon(QIcon(os.path.join('icons', 'icon.png')))
+
         self.setMinimumWidth(self.listWidget.width())
         self.setMinimumHeight(self.tableWidget.height() * 3)
 
@@ -38,7 +43,9 @@ class MyWidget(QMainWindow):
         self.actionSave_file.triggered.connect(self.save_file)
         self.actionSave_as.triggered.connect(self.save_as)
         self.actionDelete_file.triggered.connect(self.delete_file)
-
+        self.actionRename_file.triggered.connect(self.rename_file)
+        self.actionOpen_cmd.triggered.connect(self.open_cmd)
+        self.actionGithub.triggered.connect(self.show_help)
 
         self.listWidget.doubleClicked.connect(self.choose_item)
         self.lineEdit.returnPressed.connect(self.change_folder_name)
@@ -55,7 +62,7 @@ class MyWidget(QMainWindow):
         self.tableWidget.setColumnCount(len(self.data['opened_files']))
         self.tableWidget.setEditTriggers(QAbstractItemView.NoEditTriggers)
 
-        for loader, name, ispkg in walk_packages(interpreters.__path__):
+        for loader, name, is_pkg in walk_packages(interpreters.__path__):
             __import__(f'interpreters.{name}')
 
             action = QAction(self)
@@ -75,8 +82,10 @@ class MyWidget(QMainWindow):
     def resize_widgets(self):
         self.listWidget.resize(self.listWidget.width(), super().height() - self.lineEdit.height() - 43)
         self.tableWidget.resize(super().width() - self.lineEdit.width() - 1, self.tableWidget.height())
-        self.widget.resize(super().width() - self.listWidget.width(), super().height() - self.tableWidget.height() - 43)
-        self.textEditor.resize(super().width() - self.listWidget.width(), super().height() - self.tableWidget.height() - 43)
+        self.widget.resize(super().width() - self.listWidget.width(),
+                           super().height() - self.tableWidget.height() - 43)
+        self.textEditor.resize(super().width() - self.listWidget.width(),
+                               super().height() - self.tableWidget.height() - 43)
 
     def new_file(self):
         file_name, ok = QInputDialog.getText(self, 'New file', 'Enter file name:')
@@ -131,7 +140,8 @@ class MyWidget(QMainWindow):
 
     def open_folder(self, opened=''):
         if not opened:
-            folder = QFileDialog.getExistingDirectory(None, 'Select a folder:', self.data['cur_folder'], QFileDialog.ShowDirsOnly)
+            folder = QFileDialog.getExistingDirectory(None, 'Select a folder:',
+                                                      self.data['cur_folder'], QFileDialog.ShowDirsOnly)
         else:
             folder = opened
 
@@ -142,23 +152,47 @@ class MyWidget(QMainWindow):
         with open('data.json', 'w', encoding='utf-8') as f:
             json.dump(self.data, f, indent=4)
 
-        self.lineEdit.setText(self.data['cur_folder'].split('/')[-1])
+        self.lineEdit.setText(os.path.basename(self.data['cur_folder']))
         self.textEditor.setText('')
         self.listWidget.clear()
 
-        # folders
         for fld in [i for i in os.listdir(folder) if os.path.isdir(os.path.join(folder, i))]:
             item = QListWidgetItem(self.listWidget)
-            item_widget = widgets.FolderItemQWidget(fld)
+            item.setToolTip(os.path.join(self.data['cur_folder'], fld))
+            item_widget = widgets.FolderItemWidget(fld)
             item.setSizeHint(item_widget.sizeHint())
             self.listWidget.addItem(item)
             self.listWidget.setItemWidget(item, item_widget)
             item.setData(CustomObjectRole, fld)
 
-        # files
+            if not os.listdir(os.path.join(folder, fld)):
+                continue
+
+            fld = os.path.join(folder, fld)
+            for subfld in [i for i in os.listdir(fld) if os.path.isdir(os.path.join(fld, i))]:
+                path = os.path.join(fld, subfld)
+                item = QListWidgetItem(self.listWidget)
+                item.setToolTip(path)
+                item_widget = widgets.FolderItemWidget(subfld, is_sub=True)
+                item.setSizeHint(item_widget.sizeHint())
+                self.listWidget.addItem(item)
+                self.listWidget.setItemWidget(item, item_widget)
+                item.setData(CustomObjectRole, subfld)
+
+            for file in [i for i in os.listdir(fld) if os.path.isfile(os.path.join(fld, i))]:
+                path = os.path.join(fld, file)
+                item = QListWidgetItem(self.listWidget)
+                item.setToolTip(path)
+                item_widget = widgets.FileItemWidget(file, is_sub=True)
+                item.setSizeHint(item_widget.sizeHint())
+                self.listWidget.addItem(item)
+                self.listWidget.setItemWidget(item, item_widget)
+                item.setData(CustomObjectRole, file)
+
         for file in [i for i in os.listdir(folder) if os.path.isfile(os.path.join(folder, i))]:
             item = QListWidgetItem(self.listWidget)
-            item_widget = widgets.FileItemQWidget(file)
+            item.setToolTip(os.path.join(self.data['cur_folder'], file))
+            item_widget = widgets.FileItemWidget(file)
             item.setSizeHint(item_widget.sizeHint())
             self.listWidget.addItem(item)
             self.listWidget.setItemWidget(item, item_widget)
@@ -184,37 +218,90 @@ class MyWidget(QMainWindow):
         self.open_folder(self.data['cur_folder'])
 
     def delete_file(self):
-        file = self.listWidget.currentItem().data(CustomObjectRole)
+        file = self.listWidget.currentItem().toolTip()
 
-        dlg = QMessageBox(self)
-        dlg.setWindowTitle('Delete file')
-        dlg.setText(f'Are you sure you want to delete {file}?')
-        dlg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-        btn = dlg.exec()
+        if os.path.isfile(file):
+            dlg = QMessageBox(self)
+            dlg.setWindowTitle('Delete file')
+            dlg.setText(f'Are you sure you want to delete {file}?')
+            dlg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+            btn = dlg.exec()
+        elif os.path.isdir(file):
+            dlg = QMessageBox(self)
+            dlg.setWindowTitle('Delete directory')
+            dlg.setText(f'Are you sure you want to delete {file}?\nWarning: all subdirectories and files will be deleted aswell!')
+            dlg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+            btn = dlg.exec()
 
         if btn == QMessageBox.Yes:
-            if os.path.isfile(os.path.join(self.data['cur_folder'], file)):
-                os.remove(os.path.join(self.data['cur_folder'], file))
+            if os.path.isfile(file):
+                os.remove(file)
+
+            if os.path.isdir(file):
+                rmtree(file)
 
             self.open_folder(self.data['cur_folder'])
             self.textEditor.setText('')
 
-    def choose_item(self):
-        self.open_file(self.listWidget.currentItem().data(CustomObjectRole))
+    def rename_file(self):
+        file_name = self.opened_file
 
+        if not file_name:
+            dlg = QMessageBox(self)
+            dlg.setWindowTitle('Oh no!')
+            dlg.setText('No file is opened right now.')
+            dlg.exec()
+            return
+        
+        new_file_name, ok = QInputDialog.getText(self, f'Rename file {file_name}', 'Enter new file name:')
+
+        if not ok:
+            return
+
+        if os.path.isfile(os.path.join(self.data['cur_folder'], new_file_name)):
+            dlg = QMessageBox(self)
+            dlg.setWindowTitle('Oh no!')
+            dlg.setText(f'File "{file_name}" already exists')
+            dlg.exec()
+        else:
+            os.rename(os.path.join(self.data['cur_folder'], file_name),
+                      os.path.join(self.data['cur_folder'], new_file_name))
+
+            del self.data['opened_files'][self.data['opened_files'].index(os.path.basename(file_name))]
+            with open('data.json', 'w') as f:
+                json.dump(self.data, f, indent=4)
+
+            self.open_folder(self.data['cur_folder'])
+            self.open_file(new_file_name)
+            self.update_file_list()
+
+    def choose_item(self):
+        item = self.listWidget.currentItem().toolTip()
+
+        if os.path.isfile(item):
+            self.open_file(item, item.split('\\')[0])
+        else:
+            dlg = QMessageBox(self)
+            dlg.setWindowTitle('Change current directory')
+            dlg.setText(f'Change current directory to {item}?')
+            dlg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+            btn = dlg.exec()
+
+            if btn == QMessageBox.Yes:
+                self.open_folder(item)
 
     def change_folder_name(self):
-        if self.data['cur_folder'].split('/')[-1] == self.lineEdit.text():
+        if os.path.basename(self.data['cur_folder']) == self.lineEdit.text():
             return
         
         dlg = QMessageBox(self)
-        dlg.setWindowTitle(self.data['cur_folder'].split('/')[-1] + ' => ' + self.lineEdit.text())
+        dlg.setWindowTitle(os.path.basename(self.data['cur_folder']) + ' => ' + self.lineEdit.text())
         dlg.setText('Are you sure you want to change current folder name?')
         dlg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
         btn = dlg.exec()
 
         if btn == QMessageBox.Yes:
-            destination = '/'.join(self.data['cur_folder'].split('/')[:-1] + [self.lineEdit.text()])
+            destination = '/'.join(os.path.basename(self.data['cur_folder']) + [self.lineEdit.text()])
             os.rename(self.data['cur_folder'], destination)
             self.data['cur_folder'] = destination
             self.open_folder(self.data['cur_folder'])
@@ -226,7 +313,7 @@ class MyWidget(QMainWindow):
 
         for i, file in enumerate(self.data['opened_files']):
             widget = QWidget()
-            obj = widgets.ListFileWidget(widget, file)
+            obj = widgets.ListFileWidget(widget, os.path.basename(file))
 
             self.opened_files.append(obj)
             self.opened_files[i].btn.clicked.connect(self.remove_file_from_list)
@@ -255,31 +342,38 @@ class MyWidget(QMainWindow):
 
     def update_status_bar(self, text=None, show_pos=True):
         if text == None:
-            text = self.status_bar.currentMessage().split(' ; ')[0]
+            text = os.path.basename(self.opened_file)
 
         res = f'{text} ; Pos {self.textEditor.textEdit.textCursor().position()}' if show_pos else text
         self.status_bar.showMessage(res)
 
     def run_code(self, mod):
-        if not self.opened_file:
-            return
+        try:
+            self.console.text.setText('')
 
-        self.console.text.setText('')
+            mod = import_module(f'interpreters.{self.sender().text()}')
+            interpreter = mod.Interpreter()
 
-        mod = import_module(f'interpreters.{self.sender().text()}')
-        interpreter = mod.Interpreter()
+            with open(self.opened_file, 'r') as f:
+                code = f.read()
 
-        with open(self.opened_file, 'r') as f:
-            code = f.read()
+            interpreter.run(code, self.console)
+            self.console.show()
+        except FileNotFoundError:
+            dlg = QMessageBox(self)
+            dlg.setWindowTitle('Oh no!')
+            dlg.setText('No file is opened.')
+            dlg.exec()
+    
+    def open_cmd(self):
+        os.system(f'start cmd /K cd {self.data["cur_folder"]}')
 
-        interpreter.run(code, self.console)
-        self.console.show()
+    def show_help(self):
+        webbrowser.open('https://github.com/shadbemad/pyqt5-ide')
+
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    ex = MyWidget()
+    ex = MainWindow()
     ex.show()
     sys.exit(app.exec())
-
-
-# TODO: make it visible if file is redacted (like a dot in vs code)
