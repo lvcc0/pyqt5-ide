@@ -241,6 +241,7 @@ class MainWindow(QMainWindow):
                 rmtree(file)
 
             self.open_folder(self.data['cur_folder'])
+            self.update_file_list()
             self.textEditor.setText('')
 
     def rename_file(self):
@@ -254,20 +255,20 @@ class MainWindow(QMainWindow):
             return
         
         new_file_name, ok = QInputDialog.getText(self, f'Rename file {file_name}', 'Enter new file name:')
+        new_file_name = os.path.join(*file_name.split('\\')[0:-1], new_file_name)
 
         if not ok:
             return
 
-        if os.path.isfile(os.path.join(self.data['cur_folder'], new_file_name)):
+        if os.path.isfile(new_file_name):
             dlg = QMessageBox(self)
             dlg.setWindowTitle('Oh no!')
             dlg.setText(f'File "{file_name}" already exists')
             dlg.exec()
-        else:
-            os.rename(os.path.join(self.data['cur_folder'], file_name),
-                      os.path.join(self.data['cur_folder'], new_file_name))
+        elif os.path.isfile(file_name):
+            os.rename(file_name, new_file_name)
 
-            del self.data['opened_files'][self.data['opened_files'].index(os.path.basename(file_name))]
+            del self.data['opened_files'][self.data['opened_files'].index(file_name)]
             with open('data.json', 'w') as f:
                 json.dump(self.data, f, indent=4)
 
